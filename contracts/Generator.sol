@@ -12,9 +12,9 @@ contract NFTGenerator is ERC721URIStorage, Ownable, ReentrancyGuard {
   using Counters for Counters.Counter;
 
   // VARIABLES
-  mapping(address => MintedNFT[]) mintedNFTs;
   Counters.Counter private _tokenIds;
   uint256 public mintingPrice;
+  mapping(address => MintedNFT[]) public mintedNFTs;
 
   // STRUCTS
   struct MintedNFT {
@@ -25,6 +25,7 @@ contract NFTGenerator is ERC721URIStorage, Ownable, ReentrancyGuard {
 
   // EVENTS
   event NFTMinted(uint256 id, address creator, string tokenURI);
+  event WithdrawnFunds(uint256 amount, address receiver);
   event Received(address sender, uint256 amount);
 
   // MODIFIERS
@@ -33,27 +34,31 @@ contract NFTGenerator is ERC721URIStorage, Ownable, ReentrancyGuard {
     _;
   }
 
+  modifier checkEmptyTokenURI(string calldata tokenURI) {
+    require(bytes(tokenURI).length != 0, "tokenURI can't be empty");
+    _;
+  }
+
   constructor(uint256 initialMintingPrice) ERC721 ("MyCustomNFTCollection", "MCNFT") {
     mintingPrice = initialMintingPrice;
   }
 
   // BUSINESS LOGIC
-  function generateNFT(string calldata tokenURI) payable public checkPaidAmount {
-      require(bytes(tokenURI).length != 0, "tokenURI can't be empty");
-      uint256 newItemId = _tokenIds.current();
+  function generateNFT(string calldata tokenURI) payable public checkPaidAmount checkEmptyTokenURI(tokenURI) {
+    uint256 newItemId = _tokenIds.current();
 
-      _safeMint(msg.sender, newItemId);
+    _safeMint(msg.sender, newItemId);
 
-      _setTokenURI(newItemId, tokenURI);
+    _setTokenURI(newItemId, tokenURI);
 
-      mintedNFTs[msg.sender].push(MintedNFT({
-        id: newItemId,
-        creator: msg.sender,
-        tokenURI: tokenURI
-      }));
+    mintedNFTs[msg.sender].push(MintedNFT({
+      id: newItemId,
+      creator: msg.sender,
+      tokenURI: tokenURI
+    }));
 
-      emit NFTMinted(newItemId, msg.sender, tokenURI);
-      _tokenIds.increment();
+    emit NFTMinted(newItemId, msg.sender, tokenURI);
+    _tokenIds.increment();
   }
 
   function getUserNFTs() public view returns (MintedNFT[] memory) {
@@ -67,7 +72,10 @@ contract NFTGenerator is ERC721URIStorage, Ownable, ReentrancyGuard {
   }
 
   function withdrawFunds(address payable receiver) public nonReentrant onlyOwner{
-    Address.sendValue(receiver, address(this).balance);
+    uint256 amount = address(this).balance;
+    Address.sendValue(receiver, amount);
+
+    emit WithdrawnFunds(amount, receiver);
   }
 
   // FALLBACKS
